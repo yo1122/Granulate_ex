@@ -1,0 +1,5 @@
+POST = 'POST'
+GET = 'GET'
+SUCCESS = 'success'
+ERROR = 'error'
+MESSAGE = 'message'
