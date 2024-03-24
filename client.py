@@ -19,7 +19,9 @@ def run_client():
 
     try:
         get_messages_thread.join()
+        print("STRANGE1")
         send_message_thread.join()
+        print("STRANGE2")
     except KeyboardInterrupt:
         print("\nExiting...")
         stop_event.set()
@@ -53,10 +55,8 @@ def send_message(username, stop_event):
         response = requests.post(f"{SERVER_URL}/send_message", json=data, auth=(username, ""), verify=False)
         if response.status_code == 201:
             print("Message sent successfully.")
-            return True
         else:
             print("Failed to send message.")
-            return False
 
 
 if __name__ == "__main__":

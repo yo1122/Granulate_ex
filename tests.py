@@ -1,5 +1,4 @@
 import threading
-import threading
 import time
 import unittest
 from io import StringIO
@@ -11,6 +10,12 @@ from constants import SUCCESS, POLL_TIME
 
 SIMPLE_MESSAGE_DATA = {'message': 'Test message'}
 SIMPLE_AUTH_DATA = {'Authorization': 'Basic dXNlcjE='}  # Base64 encoded "user1"
+
+
+def get_simple_return_data():
+    simple_return_data = SIMPLE_MESSAGE_DATA
+    simple_return_data.update({"username": "user1"})
+    return simple_return_data
 
 
 class TestServer(unittest.TestCase):
@@ -28,14 +33,25 @@ class TestServer(unittest.TestCase):
         self.app.post('/send_message', json=SIMPLE_MESSAGE_DATA, headers=SIMPLE_AUTH_DATA)
 
         response = self.app.get('/get_messages')
-        simple_return_data = SIMPLE_MESSAGE_DATA
-        simple_return_data.update({"username": "user1"})
+        simple_return_data = get_simple_return_data()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(simple_return_data, response.json)
 
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_get_messages_unrelated_to_state_success(self, mock_stdout):
+        self.app.post('/send_message', json=SIMPLE_MESSAGE_DATA, headers=SIMPLE_AUTH_DATA)
+        new_server = app.test_client()
+        response = new_server.get('/get_messages')
+
+        simple_return_data = get_simple_return_data()
+        self.assertIn(simple_return_data, response.json)
+
 
 class TestClient(unittest.TestCase):
+    def setUp(self):
+        # Mock flask server
+        self.app = app.test_client()
 
     @patch('client.requests.get')
     @patch('sys.stdout', new_callable=StringIO)

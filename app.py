@@ -1,12 +1,13 @@
 import os
 import ssl
+
 from flask import Flask, jsonify, request
+
+from Messages import Message, init_db
 from constants import POST, GET, SUCCESS, ERROR, MESSAGE, SERVER_HOST, SERVER_PORT, FAIL_VALUE
 
 app = Flask(__name__)
-
-# Change to DB on milestone 3
-messages = []
+init_db(app)
 
 
 def run_server():
@@ -40,13 +41,15 @@ def send_message():
         return data, code
 
     username = request.authorization.username
-    message = data[MESSAGE]
-    messages.append({'username': username, MESSAGE: message})
+    message_text = data[MESSAGE]
+    Message.message_to_db(username, message_text)
+
     return jsonify({SUCCESS: True}), 201
 
 
 @app.route('/get_messages', methods=[GET])
 def get_messages():
+    messages = Message.get_all_unseen()
     return jsonify(messages)
 
 
