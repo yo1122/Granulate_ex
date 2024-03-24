@@ -1,9 +1,6 @@
 FROM python:3.9-slim
 
-# Set environment variables
 ENV FLASK_APP=app.py
-ENV FLASK_RUN_HOST=0.0.0.0
-ENV FLASK_RUN_PORT=5000
 
 # Install system dependencies
 RUN apt-get update && \
@@ -25,7 +22,11 @@ COPY . .
 RUN openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365 \
     -subj "/C=US/ST=State/L=City/O=Organization/OU=IT/CN=localhost"
 
-EXPOSE 5000
+# Set default values for host and port
+ENV SERVER_HOST=0.0.0.0
+ENV SERVER_PORT=5000
+
+EXPOSE $SERVER_PORT
 
 # Run the Flask application with HTTPS
-CMD ["flask", "run", "--cert=cert.pem", "--key=key.pem"]
+CMD ["sh", "-c", "flask run --cert=cert.pem --key=key.pem --port=$SERVER_PORT --host=$SERVER_HOST"]
