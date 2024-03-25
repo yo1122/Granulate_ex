@@ -1,21 +1,22 @@
 import os
-import threading
+import time
 
 import requests
+import socketio
 from socketio import Client
 
-from constants import GET_CHATROOMS
+from constants import GET_CHATROOMS, MESSAGE, GET_MESSAGE, GET_MESSAGES
 from constants import LOGIN, REGISTER, ERROR, REPEATED_PASSWORD, USERNAME, PASSWORD, CHATROOM, JOIN_ROOM, \
     SERVER_HOST, SERVER_PORT
 
 # TODO: handle ssl certificate smarter
-# TODO: test db dockerfile
 # TODO: go over all env vars and constants, especially if using const in several important places
 # TODO: verify incoming message, especially format (unicode?)
 # TODO: test per (main funcs/cases)
 
 SERVER_URL = f"https://{os.environ.get(SERVER_HOST, 'localhost')}:{os.environ.get(SERVER_PORT, 5000)}"
 socket_client = Client(ssl_verify=False)
+connection_data = {}  # Bad practice, due to lack of time
 
 
 def send_request(endpoint, is_get=False, data=None, username=None, password=None):
@@ -31,13 +32,24 @@ def send_request(endpoint, is_get=False, data=None, username=None, password=None
                                  verify=False)
 
 
+def show_user_message(username, message):
+    print(f"{username}: {message}")
+
+
 def send_to_ws(event, data):
     socket_client.emit(event, data)
+
+
+def reconnect():
+    print("Attempting to reconnect...")
+    time.sleep(2)
+    send_to_ws(JOIN_ROOM, {USERNAME: connection_data[USERNAME], CHATROOM: connection_data[CHATROOM]})
 
 
 @socket_client.on('connect')
 def on_connect():
     print('Connected to server')
+    send_to_ws(JOIN_ROOM, {USERNAME: connection_data[USERNAME], CHATROOM: connection_data[CHATROOM]})
 
 
 @socket_client.event
@@ -45,43 +57,31 @@ def disconnect():
     print("Disconnected from server")
 
 
+@socket_client.event
+def connect_error(data):
+    print(f"Connection failed: {data}")
 
 
+@socket_client.on(ERROR)
+def on_error(data):
+    error_message = data.get('message')
+    print(f"Received error from server: {error_message}")
 
 
-
-
-@socket_client.on('message_received')
+@socket_client.on(GET_MESSAGE)
 def on_message(data):
-    print(f"{data['username']}: {data['message']}")
+    show_user_message(data[USERNAME], data[MESSAGE])
 
 
-def get_messages(username, chatroom):
-    @socket_client.on('new_message')
-    def handle_new_message(data):
-        print(f"{data['username']}: {data['message']}")
-
-    socket_client.connect(SERVER_URL)
-    socket_client.emit('join', {"username": username, "chatroom": chatroom})
-
-
-def send_message(stop_event, username, chatroom):
-    while not stop_event.is_set():
-        message = input("Enter your message: ")
-        result = send_to_ws('send_message', {"username": username, "message": message, "chatroom": chatroom})
-        print(f"result: {result}")
-        # data = {"message": message, "chatroom": chatroom}
-        # response = requests.post(f"{SERVER_URL}/send_message", json=data, auth=(username, ""), verify=False)
-        # if response.status_code == 201:
-        #     print("Message sent successfully.")
-        # else:
-        #     print("Failed to send message.")
+@socket_client.on(GET_MESSAGES)
+def on_messages(data):
+    if data.get(MESSAGE):
+        print("You missed the following messages while gone:")
+        for message in data[MESSAGE]:
+            show_user_message(message[USERNAME], message[MESSAGE])
 
 
 def request_chatrooms():
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
     response = send_request(GET_CHATROOMS, is_get=True)
     if response.status_code == 200:
         chatrooms = response.json()
@@ -110,33 +110,40 @@ def handle_auth(username, password):
             return False
 
 
-def start_all_components(username, password, chatroom):
-    socket_client.connect(SERVER_URL, auth={USERNAME: username, PASSWORD: password})
-    send_to_ws(JOIN_ROOM, {CHATROOM: chatroom})
+def safe_disconnect():
+    # TODO: add 'finally' clause to run_client
+    pass
 
-    stop_event = threading.Event()
-    send_message_thread = threading.Thread(target=send_message, args=(stop_event, username, chatroom))
-    send_message_thread.start()
 
-    return send_message_thread, stop_event
+def run_main_loop(username, password, chatroom):
+    socket_client.connect(SERVER_URL, auth={USERNAME: username, PASSWORD: password, 'reconnection': True,
+                                            'reconnection_attempts': 3, 'reconnection_delay': 1000,
+                                            'reconnection_delay_max': 5000, 'randomization_factor': 0.5})
+
+    send_to_ws(JOIN_ROOM, {USERNAME: username, CHATROOM: chatroom})
+
+    while True:
+        message = input("Enter your message: ")
+        send_to_ws(MESSAGE, {"username": username, "message": message, "chatroom": chatroom})
+
 
 def run_client():
+    global connection_data  # bad practice, due to lack of time
+
     username = input("Enter your username: ")
     password = input("Enter your password: ")
 
     if handle_auth(username, password):
         request_chatrooms()
         chatroom = input("Type name of existing or new chatroom to connect to: ")
-
-        send_message_thread, stop_event = start_all_components(username, password, chatroom)
-
+        connection_data = {USERNAME: username, CHATROOM: chatroom}
+        # handle socketio.exceptions.AuthenticationError
         try:
-            socket_client.wait()
-            send_message_thread.join()
+            run_main_loop(username, password, chatroom)
         except KeyboardInterrupt:
             print("\nExiting...")
-            socket_client.disconnect()
-            stop_event.set()
+        except socketio.exceptions.ConnectionError:
+            print("\nFailed to connect, try again later...")
 
 
 if __name__ == "__main__":

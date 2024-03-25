@@ -8,7 +8,8 @@ from sqlalchemy.exc import OperationalError
 
 app = Flask(__name__)
 db = SQLAlchemy()
-socketio = SocketIO(app, cors_allowed_origins="*") #####
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True, ping_interval=15,
+                    ping_timeout=60) ##### TODO: remove extra logs & cors?
 
 def get_db_uri():
     db_name = os.environ.get('MESSAGE_DB_NAME')
@@ -34,7 +35,8 @@ def full_init_app():
     except OperationalError as e:
         print(f"Encountered an error creating DB tables. Make sure you've set up the DB and env vars: {e}")
         raise e
-    #
+
+    # TODO: use blueprints
     # main = Blueprint('main', __name__)
     # auth = Blueprint('auth', __name__)
     # app.register_blueprint(main)

@@ -25,6 +25,7 @@ RUN openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -day
 # Set default values for host and port
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=5000
+ENV FLASK_APP=app.py
 
 EXPOSE $SERVER_PORT
 
